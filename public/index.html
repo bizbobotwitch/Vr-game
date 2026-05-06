@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Multiplayer VR Blackjack</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.3/dist/aframe-environment-component.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+  </head>
+  <body>
+    <a-scene cursor="rayOrigin: mouse">
+      
+      <a-entity environment="preset: default; groundColor: #445; grid: none"></a-entity>
+
+      <a-entity position="0 0 0">
+        <a-camera position="0 1.6 0"></a-camera>
+        <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 10"></a-entity>
+        <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 10"></a-entity>
+      </a-entity>
+
+      <a-box position="0 0.8 -1.5" width="2" height="0.1" depth="1.5" color="#0f5c2e"></a-box>
+      <a-cylinder position="0 0 -1.5" radius="0.8" height="0.8" color="#333"></a-cylinder>
+
+      <a-entity id="status-text" text="value: Connecting...; align: center; width: 5; color: white" position="0 2 -2"></a-entity>
+      <a-entity id="score-text" text="value: Player: 0 | Dealer: 0; align: center; width: 4; color: yellow" position="0 1.7 -2"></a-entity>
+
+      <a-entity class="clickable" id="btn-hit" position="-0.4 1.1 -1.5" geometry="primitive: box; width: 0.3; height: 0.1; depth: 0.05" material="color: #2b82c9">
+        <a-text value="HIT" align="center" position="0 0 0.03" scale="0.5 0.5 0.5"></a-text>
+      </a-entity>
+      
+      <a-entity class="clickable" id="btn-stand" position="0.4 1.1 -1.5" geometry="primitive: box; width: 0.3; height: 0.1; depth: 0.05" material="color: #c92b2b">
+        <a-text value="STAND" align="center" position="0 0 0.03" scale="0.5 0.5 0.5"></a-text>
+      </a-entity>
+
+      <a-entity class="clickable" id="btn-restart" position="0 1.3 -1.5" geometry="primitive: box; width: 0.5; height: 0.1; depth: 0.05" material="color: #e6a822" visible="false" scale="0 0 0">
+        <a-text value="START / PLAY AGAIN" align="center" position="0 0 0.03" scale="0.4 0.4 0.4"></a-text>
+      </a-entity>
+
+      <a-entity id="dealer-cards" position="0 0.86 -1.8"></a-entity>
+      <a-entity id="player-cards" position="0 0.86 -1.1"></a-entity>
+
+    </a-scene>
+
+    <script>
+      const socket = io();
+
+      const statusText = document.getElementById('status-text');
+      const scoreText = document.getElementById('score-text');
+      const btnHit = document.getElementById('btn-hit');
+      const btnStand = document.getElementById('btn-stand');
+      const btnRestart = document.getElementById('btn-restart');
+      const playerAnchor = document.getElementById('player-cards');
+      const dealerAnchor = document.getElementById('dealer-cards');
+
+      socket.on('updateState', (state) => {
+        statusText.setAttribute('text', `value: ${state.statusMessage}`);
+        scoreText.setAttribute('text', `value: Player: ${state.pScore} | Dealer: ${state.dScore}`);
+
+        if (state.gameOver) {
+          btnRestart.setAttribute('visible', 'true');
+          btnRestart.setAttribute('scale', '1 1 1');
+          btnHit.setAttribute('scale', '0 0 0');
+          btnStand.setAttribute('scale', '0 0 0');
+        } else {
+          btnRestart.setAttribute('visible', 'false');
+          btnRestart.setAttribute('scale', '0 0 0');
+          btnHit.setAttribute('scale', '1 1 1');
+          btnStand.setAttribute('scale', '1 1 1');
+        }
+
+        renderCards(state);
+      });
+
+      function renderCards(state) {
+        playerAnchor.innerHTML = '';
+        dealerAnchor.innerHTML = '';
+
+        state.playerHand.forEach((card, index) => {
+          let xOffset = (index * 0.15) - ((state.playerHand.length - 1) * 0.075);
+          let color = (card.suit === '♥' || card.suit === '♦') ? 'red' : 'black';
+          playerAnchor.innerHTML += `
+            <a-entity geometry="primitive: plane; width: 0.15; height: 0.2" 
+                      material="color: white; shader: flat" 
+                      position="${xOffset} 0 0" rotation="-60 0 0"
+                      text="value: ${card.value}\\n${card.suit}; color: ${color}; align: center; width: 1.5; zOffset: 0.01">
+            </a-entity>`;
+        });
+
+        state.dealerHand.forEach((card, index) => {
+          let xOffset = (index * 0.15) - ((state.dealerHand.length - 1) * 0.075);
+          
+          if (index === 1 && !state.gameOver) {
+            dealerAnchor.innerHTML += `
+              <a-entity geometry="primitive: plane; width: 0.15; height: 0.2" 
+                        material="color: #0d2f6b; shader: flat" 
+                        position="${xOffset} 0 0" rotation="-60 0 0">
+              </a-entity>`;
+          } else {
+            let color = (card.suit === '♥' || card.suit === '♦') ? 'red' : 'black';
+            dealerAnchor.innerHTML += `
+              <a-entity geometry="primitive: plane; width: 0.15; height: 0.2" 
+                        material="color: white; shader: flat" 
+                        position="${xOffset} 0 0" rotation="-60 0 0"
+                        text="value: ${card.value}\\n${card.suit}; color: ${color}; align: center; width: 1.5; zOffset: 0.01">
+              </a-entity>`;
+          }
+        });
+      }
+
+      btnHit.addEventListener('click', () => socket.emit('action', 'hit'));
+      btnStand.addEventListener('click', () => socket.emit('action', 'stand'));
+      btnRestart.addEventListener('click', () => socket.emit('action', 'start'));
+    </script>
+  </body>
+</html>
